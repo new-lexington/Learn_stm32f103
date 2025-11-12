@@ -600,53 +600,31 @@ TIM的 **OC（Output Compare）输出比较** 主要用于输出PWM波形，PWM�
 代码展示：OLED和Delay相关代码见前面，本节略。
 **- main.c**
 ```c
-#include "stm32f10x.h"                  // Device header
+#include "stm32f10x.h"
 #include "OLED.h"
 #include "PWM.h"
 #include "Delay.h"
 
-int main(void){
-    uint16_t pwm_duty = 0;//PWM波的占空比
-    uint8_t  pwm_flag = 1;//占空比变化控制信号，1升0降
-    
-    //OLED显示屏初始化
-    OLED_Init();
-    OLED_ShowString(1,1,"BreathLED:");
-    OLED_ShowString(2,1,"Init");
-    //PWM初始化
-    PWM_Init();
-    
-    while(1){
-        
-        Delay_ms(5);//0.5s完成100个占空比变化
-        //调整占空比
-        if(pwm_flag==1){
-            if(pwm_duty<100){
-                pwm_duty++;
-                OLED_ShowString(2,1,"Inhale");
-            }else if(pwm_duty==100){
-                pwm_flag = 0;
-            }else{
-                pwm_duty = 0;
-                pwm_flag = 1;
-            }
-        }else if(pwm_flag == 0){
-            if(pwm_duty >0 && pwm_duty<=100){
-                pwm_duty--;
-                OLED_ShowString(2,1,"Exhale");
-            }else if(pwm_duty==0){
-                pwm_flag = 1;
-            }else{
-                pwm_duty = 0;
-                pwm_flag = 1;
-            }
-        }else{
-            pwm_duty = 0;
-            pwm_flag = 1;
-        }
-        //改变占空比
-        PWM_SetDuty(pwm_duty);
-    };
+uint8_t i;
+
+int main(void)
+{
+	OLED_Init();
+	PWM_Init();
+	
+    while (1)
+    {
+		for (i = 0; i <= 100; i ++)
+		{
+			PWM_SetCompare1(i);
+			Delay_ms(10);
+		}
+		for (i = 0; i <= 100; i ++)
+		{
+			PWM_SetCompare1(100 - i);
+			Delay_ms(10);
+		}
+    }
 }
 
 ```
@@ -657,7 +635,7 @@ int main(void){
 #define __PWM_H
 
 void PWM_Init(void);
-void PWM_SetDuty(uint16_t pwm_duty);
+void PWM_SetCompare(uint16_t Compare);
 
 #endif
 
@@ -667,47 +645,49 @@ void PWM_SetDuty(uint16_t pwm_duty);
 ```c
 #include "stm32f10x.h"                  // Device header
 
-//TIM输出比较模式-PWM初始化
-void PWM_Init(void){
-    //1.配置RCC
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
-//    //隐：引脚重映射，将PA0映射到PA15
-//    RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);//引脚重映射会使用AFIO
-//    GPIO_PinRemapConfig(GPIO_PartialRemap1_TIM2, ENABLE);//参考手册“8.3.7定时器复用功能重映射”
-//    GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);//PA15、PB3、PB4变成普通IO口
-    //2.选择时基单元时钟
-    TIM_InternalClockConfig(TIM2);
-    //3.配置时基单元-10kHz
-    TIM_TimeBaseInitTypeDef TIM_TimeBaseInitStructure;
-    TIM_TimeBaseInitStructure.TIM_ClockDivision = TIM_CKD_DIV1;
-    TIM_TimeBaseInitStructure.TIM_CounterMode = TIM_CounterMode_Up;//向上计数
-    TIM_TimeBaseInitStructure.TIM_Period = 100-1;//自动重装载值
-    TIM_TimeBaseInitStructure.TIM_Prescaler = 72-1;//预分频
-    TIM_TimeBaseInitStructure.TIM_RepetitionCounter = 0x0000;
-    TIM_TimeBaseInit(TIM2, &TIM_TimeBaseInitStructure);
-    //4.配置运行控制
-    TIM_Cmd(TIM2, ENABLE);
-    //5.配置输出捕获电路
-    TIM_OCInitTypeDef TIM_OCInitStructure;
-    TIM_OCStructInit(&TIM_OCInitStructure);//后续即使用到高级定时器初始化，也不会出错
-    TIM_OCInitStructure.TIM_OCMode      = TIM_OCMode_PWM1;      //PWM模式1
-    TIM_OCInitStructure.TIM_OCPolarity  = TIM_OCPolarity_High;
-    TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;
-    TIM_OCInitStructure.TIM_Pulse       = 0x0000;                 //占空比
-    TIM_OC1Init(TIM2, &TIM_OCInitStructure);
-    //7.配置GPIO-PA0
-    GPIO_InitTypeDef GPIO_InitStructure;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;//复用推挽输出
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;      //GPIO_Pin_15-引脚重映射
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-    GPIO_Init(GPIOA, &GPIO_InitStructure);
+void PWM_Init(void)
+{
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE); 	//开启Tim2时钟
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA,ENABLE); 	//开启GPIOA时钟
+	//引脚重映射
+/*	RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO,ENABLE);		//开启AFIO时钟
+	GPIO_PinRemapConfig(GPIO_PartialRemap1_TIM2,ENABLE);	//Tim2部分重映射1
+	GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable,ENABLE);	//解除PA15的JTAG调试功能
+*/
+	//配置GPIO
+	GPIO_InitTypeDef GPIO_StructInit;
+	GPIO_StructInit.GPIO_Mode = GPIO_Mode_AF_PP;		//配置为复用推挽输出
+	GPIO_StructInit.GPIO_Pin = GPIO_Pin_0;				//如果需要重映射，改成PA15
+	GPIO_StructInit.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_Init(GPIOA,&GPIO_StructInit);
+    //选择时基单元的时钟源
+    TIM_InternalClockConfig(TIM2); // 默认使用内部时钟，也可以不写
+    //配置时基单元-1KHz
+    TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
+    TIM_TimeBaseStructure.TIM_ClockDivision = TIM_CKD_DIV1;// 外部时钟源的输入捕获滤波器采样频率，内部时钟无所谓    
+    TIM_TimeBaseStructure.TIM_Prescaler = 720 -1; // PSC预分频值，7200分频后计数器时钟为10KHz
+    TIM_TimeBaseStructure.TIM_Period = 100 - 1; // ARR自动重装器的值10000个计数周期溢出一次
+    TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;// 向上计数模式
+    TIM_TimeBaseStructure.TIM_RepetitionCounter = 0;//重复计数器的值（高级定时器才有）
+    TIM_TimeBaseInit(TIM2, &TIM_TimeBaseStructure);
+    TIM_ClearFlag(TIM2, TIM_FLAG_Update);       // 消除上一行为止的溢出中断标志，立刻产生更新事件
+	//配置输出比较单元
+	TIM_OCInitTypeDef TIM_OCInitStruct;
+	TIM_OCStructInit(&TIM_OCInitStruct);
+	TIM_OCInitStruct.TIM_OCMode  = TIM_OCMode_PWM1;				//配置输出比较模式
+	TIM_OCInitStruct.TIM_OCPolarity = TIM_OCPolarity_High;		//配置输出比较极性
+	TIM_OCInitStruct.TIM_OutputState = TIM_OutputState_Enable;	//配置输出使能
+	TIM_OCInitStruct.TIM_Pulse = 0;								//设置CCR
+	TIM_OC1Init(TIM2, &TIM_OCInitStruct);
+	
+   //配置定时器使能
+    TIM_Cmd(TIM2, ENABLE); // Start TIM2
+
 }
 
-//设置PWM波的占空比
-//范围是0~100
-void PWM_SetDuty(uint16_t pwm_duty){
-    TIM_SetCompare1(TIM2, pwm_duty);	//设置CCR寄存器的值，不直接是占空比，占空比是CCR和ARR+1共同决定的
+void PWM_SetCompare1(uint16_t Compare)
+{
+	TIM_SetCompare1(TIM2,Compare);	//设置CCR寄存器的值，不直接是占空比，占空比是CCR和ARR+1共同决定的
 }
 
 ```
