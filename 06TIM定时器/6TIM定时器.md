@@ -707,7 +707,7 @@ void PWM_Init(void){
 //设置PWM波的占空比
 //范围是0~100
 void PWM_SetDuty(uint16_t pwm_duty){
-    TIM_SetCompare1(TIM2, pwm_duty);
+    TIM_SetCompare1(TIM2, pwm_duty);	//设置CCR寄存器的值，不直接是占空比，占空比是CCR和ARR+1共同决定的
 }
 
 ```
